@@ -1,5 +1,5 @@
 """
-SQLite database layer -> accounts, trans act history.... (replaces fixed-size limit by esp32 ram)
+SQLite database layer
 """
 
 import os
@@ -8,14 +8,16 @@ from datetime import datetime, timezone
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "tollway.db")
 
-DEFAULT_BALANCE = 2000    
-EXIT_COST = 150          
-# ARCHIEVE MUNA KASI MAY MATRIX NA::
+#outdated replaced already pero keep incase it explode
+
+DEFAULT_BALANCE = 2000   
+EXIT_COST = 150           
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     vehicle_number INTEGER PRIMARY KEY AUTOINCREMENT,
     rfid_uid        TEXT UNIQUE NOT NULL,
-    balance         INTEGER NOT NULL DEFAULT 2000,
+    balance         REAL NOT NULL DEFAULT 2000.0,
     is_inside       INTEGER NOT NULL DEFAULT 0,
     entry_lane      TEXT
 );
@@ -27,12 +29,12 @@ CREATE TABLE IF NOT EXISTS transaction_history (
     vehicle_number  INTEGER NOT NULL,
     lane_id         TEXT NOT NULL,
     gate_type       TEXT NOT NULL,
-    amount_charged  INTEGER NOT NULL,
+    amount_charged  REAL NOT NULL,
     timestamp       TEXT NOT NULL,
     FOREIGN KEY (vehicle_number) REFERENCES accounts(vehicle_number)
 );
 """
-
+#------------------------------------------------------------------------------
 
 class TollwayDB:
     def __init__(self, db_path: str = DB_PATH, reset: bool = False):
@@ -46,7 +48,6 @@ class TollwayDB:
         self.conn.commit()
 
     def _migrate_entry_lane_column(self):
-        """CREATE TABLE IF NOT EXISTS AUTOMATICS OMCM"""
         try:
             self.conn.execute("ALTER TABLE accounts ADD COLUMN entry_lane TEXT")
         except sqlite3.OperationalError as e:
@@ -56,7 +57,7 @@ class TollwayDB:
     def close(self):
         self.conn.close()
 
-    # ---------------- Accountss ----------------
+# ---------------- Accounts --------------------------------
 
     def find_by_uid(self, rfid_uid: str):
         cur = self.conn.execute(
@@ -72,7 +73,6 @@ class TollwayDB:
 
     def register_account(self, rfid_uid: str, is_inside: bool = True,
                           balance: int = DEFAULT_BALANCE, entry_lane: str = None):
-        """first tap at ENTRY creates the row, same sa getOrCreateVehicleIndex() did in prototype 1.2."""
         cur = self.conn.execute(
             "INSERT INTO accounts (rfid_uid, balance, is_inside, entry_lane) VALUES (?, ?, ?, ?)",
             (rfid_uid, balance, 1 if is_inside else 0, entry_lane),
@@ -106,7 +106,6 @@ class TollwayDB:
         cur = self.conn.execute("SELECT * FROM accounts ORDER BY vehicle_number")
         return cur.fetchall()
 
-    # ---------------- Transaction history ----------------
 
     def log_transaction(self, vehicle_number: int, lane_id: str,
                          gate_type: str, amount_charged: int):

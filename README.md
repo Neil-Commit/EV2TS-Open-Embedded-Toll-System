@@ -1,8 +1,8 @@
 # Ev2TS — Electroboom v2 Toll System
 
-An open-toll RFID expressway management system built on PN532 sensors, ESP32 microcontrollers, a Python FastAPI gateway, and a real-time browser dashboard. Designed around the northbound segment of a Philippine expressway, from Balintawak to Bocaue.
+A Miniature Proof-of-Concept for Open-Toll RFID Expressway Management System built on PN532 sensors, ESP32 microcontrollers, a Python FastAPI gateway, and a real-time browser dashboard. Designed around the northbound segment of a Philippine expressway, from Balintawak to Bocaue.
 
-> **Open-toll model:** the system never blocks a vehicle at the exit gate for insufficient funds. Tolls are always deducted — including into a negative balance — and the vehicle always passes. A negative balance is a billing matter to settle on the next reload, not an access-control gate. This mirrors real-world RFID open-toll systems like DARB.
+> **Open-toll model:** also known as (open-road or cashless tolling) is a highway system where vehicles are tolled as they pass overhead gantries or sensors, rather than at physical toll plazas. Because there are no booths or barriers, drivers never have to stop or slow down, allowing traffic to flow continuously. This mirrors real-world RFID open-toll systems like SALIK and DARB.
 
 ---
 
@@ -16,22 +16,22 @@ An open-toll RFID expressway management system built on PN532 sensors, ESP32 mic
                                                |
                                          WebSocket (JSON)
                                                |
-                                     [ Browser Dashboard ]
+                                     [ Web-based Dashboard ]
                                           index.html
 ```
 
-Three ESP32 nodes each host two PN532 RFID readers. When a vehicle taps its RFID card at any interchange, the board sends a `@SCAN` packet to the Python gateway over USB serial. The gateway runs the business logic, updates the database, replies with `@ACTION`, and broadcasts the result to every connected browser tab in real time.
+Three ESP32 nodes each host two PN532 RFID readers. When a vehicle passes within range its RFID sticker at any interchange, the board sends a `@SCAN` packet to the Python gateway over USB serial. The gateway runs the business fare logic, updates the database, replies with `@ACTION`, and broadcasts the result to the interface.
 
 ---
 
 ## Interchange Layout
 
-Single northbound carriageway. Physical order along the road:
+Single northbound carriageway. Physical order along the road (ingress and egress):
 
 ```
 IN1              IN2                EX1              EX2            EX3          EX4
 Balintawak  -->  Mindanao Ave  -->  Valenzuela  -->  Meycauayan --> Marilao  --> Bocaue
-KM 12            KM 13.5            KM 15             KM 19          KM 23        KM 27
+KM 12            KM 13.5            KM 15            KM 19          KM 23        KM 27
 ```
 
 ---
@@ -41,16 +41,18 @@ KM 12            KM 13.5            KM 15             KM 19          KM 23      
 | Board | Role | Sensors |
 |---|---|---|
 | ESP32 WROOM 32U | Entrance Node | PN532 Lane 1 (Balintawak), PN532 Lane 2 (Mindanao Ave) |
-| ESP32 30-Pin USB-C | Exit Node 1 | PN532 Lane 1 (Valenzuela), PN532 Lane 2 (Meycauayan) |
-| ESP32 30-Pin (any) | Exit Node 2 | PN532 Lane 3 (Marilao), PN532 Lane 4 (Bocaue) |
+| ESP32 DevKit V1 | Exit Node 1 | PN532 Lane 1 (Valenzuela), PN532 Lane 2 (Meycauayan) |
+| ESP32 DevKit V1 | Exit Node 2 | PN532 Lane 3 (Marilao), PN532 Lane 4 (Bocaue) |
 
 All PN532 modules must have DIP switches set to **SPI mode (I1=0, I2=1)** and be powered from an external **5V** supply with a shared ground.
+*Additionally, you may use any ESP32 board, one mentioned was the one used in the original project.*
 
 ---
 
 ## Wiring
 
-Each PN532 gets its own fully independent set of pins. Nothing is shared between Lane 1 and Lane 2 on any board. The same pin numbers are reused across all three boards — they are different physical boards so there is no conflict.
+Each PN532 gets its own fully independent set of pins. Nothing is shared between Lane 1 and Lane 2 on any board. The same pin numbers are reused across all three boards.
+*Independent pins were chosen to simplify the connection on our end, even though sharing the SCK, MISO, and MOSI is perfectly acceptable.*
 
 | Signal | Lane 1 | Lane 2 |
 |---|---|---|
@@ -62,7 +64,7 @@ Each PN532 gets its own fully independent set of pins. Nothing is shared between
 | Power | 5V external | 5V external |
 | Ground | GND (common) | GND (common) |
 
-This table applies to all three boards. On Exit Node 2, Lane 1 firmware is labelled Lane 3 (Marilao) and Lane 2 is labelled Lane 4 (Bocaue) — same physical pins, different `LANE_ID` values in the firmware.
+This table applies to all three boards. On Exit Node 2, Lane 1 firmware is labelled Lane 3 (Marilao) and Lane 2 is labelled Lane 4 (Bocaue) | same physical pins, different `LANE_ID` values in the firmware.
 
 ---
 
@@ -89,12 +91,11 @@ To update fares, edit `FARE_MATRIX` in `engine.py`. No other file needs to chang
 
 ```
 ev2ts/
-├── server.py               # FastAPI web server — the central gateway
+├── server.py               # FastAPI web server
 ├── engine.py               # Business rule logic and fare matrix
 ├── database.py             # SQLite schema and data access layer
 ├── protocol.py             # @SCAN / @ACTION packet parser and formatter
 ├── serial_bridge.py        # SerialNode class: USB serial <-> Queue bridge
-├── mock_serial_test.py     # Hardware-free test harness for the engine
 │
 ├── static/
 │   ├── index.html          # Browser dashboard (WebSocket client)
@@ -121,21 +122,6 @@ The business rule logic engine. Contains the `FARE_MATRIX`, the `INTERCHANGE_NAM
 
 `process_scan()` state machine:
 
-```
-ENTRY tap
-  ├── Unknown card       → register, GRANT/NEW, stamp entry_lane
-  ├── Known, not inside  → GRANT/OK, stamp entry_lane
-  └── Known, inside      → DENY/ALREADY_INSIDE
-
-EXIT tap
-  ├── Unknown card       → DENY/UNKNOWN
-  ├── Known, not inside  → DENY/GHOST_CAR
-  └── Known, inside      → look up fare by (entry_lane, exit_lane)
-                            deduct fare, mark as OUT, clear entry_lane
-        ├── balance >= 0 → GRANT/OK
-        └── balance < 0  → GRANT/PENALTY  (still let through — open toll)
-```
-
 `process_recharge()` applies a relative delta only — there is no set-balance-to-absolute-value operation anywhere in the codebase.
 
 ### `database.py`
@@ -156,13 +142,10 @@ Strict parser and formatter for the `@`-prefixed wire protocol. Plain human-read
 ### `serial_bridge.py`
 Contains `SerialNode` — a class that opens one serial port, runs a background reader thread, and places every received line into a shared `Queue`. Also contains a standalone console entry point (an earlier version of the gateway useful for debugging without starting the full web server).
 
-### `mock_serial_test.py`
-A hardware-free test harness. Feeds a scripted sequence of `@SCAN` and `RECHARGE` lines directly into the engine and prints results. Run this to verify engine logic without any hardware attached. Scenarios covered: new registration, double-entry block, unknown card at exit, ghost car, open-toll penalty pass-through, and relative-delta recharge.
-
 ### `static/index.html`
 The browser dashboard. Connects to the gateway via WebSocket on page load and stays connected, auto-reconnecting every 2 seconds if the socket closes. On connect, the server pushes a full database snapshot (hydration) so the page is never blank.
 
-- **Announcement banner** — 3-second shoutout for every event: interchange name, vehicle number, GRANT/DENY, fare and balance
+- **Announcement banner** — 3-second shoutouwt for every event: interchange name, vehicle number, GRANT/DENY, fare and balance
 - **Bullet-bar log** — full event log where a 3px colored left bar indicates outcome (green = OK, amber = penalty, red = denied, blue = info). Text stays neutral gray throughout
 - **Interchange status grid** — compact per-sensor rows with live dot indicators that flash on each tap then return to READY
 - **Account table** — all registered vehicles with balance (negative shown in red), on-highway status, and a SET button that computes the relative delta client-side
@@ -202,8 +185,6 @@ https://dl.espressif.com/dl/package_esp32_index.json
 
 After flashing each board, open Serial Monitor at **115200 baud** and confirm two `[OK] PN532 ... found` lines appear. Close Serial Monitor before running the server — Windows allows only one program to hold a COM port at a time.
 
-**Tip:** always plug each ESP32 into the same physical USB port on your computer. Windows assigns COM numbers per port, so the same slot always gives the same COM number.
-
 ### 3. Install Python dependencies
 
 ```bash
@@ -224,7 +205,7 @@ Unplug one board at a time and re-run to confirm which COM number belongs to whi
 python server.py --entry-port COM8 --exit-port COM9 --exit2-port COM10
 ```
 
-Replace `COM8`, `COM9`, `COM10` with your actual port numbers. On Linux/Mac these look like `/dev/ttyUSB0` etc.
+Replace `COM8`, `COM9`, `COM10` with your actual port numbers. On Linux/Mac idk I use windows onle HSAHAH.
 
 Optional flags:
 
@@ -237,61 +218,10 @@ Optional flags:
 
 ### 6. Open the dashboard
 
-Open `http://localhost:8000/` in any browser on the same machine. STATUS should flip to **ONLINE** and the sensor dots go green for each connected node. Tap a card — the announcement banner, log, and account table all update in real time.
-
----
-
-## Testing Without Hardware
-
-```bash
-python mock_serial_test.py
-```
-
-Runs 10 scripted scenarios through the engine and prints pass/fail for each, plus the final database state and transaction history. No ESP32, no PN532, no serial port needed.
-
----
-
-## Wire Protocol Reference
-
-**Upstream — ESP32 to Gateway**
-```
-@SCAN,<GATE_TYPE>,<LANE_ID>,<HEX_UID>
-
-@SCAN,ENTRY,1,04A2F3D97B80     Balintawak, card 04A2...
-@SCAN,EXIT,3,58D9C2E130A5      Marilao, card 58D9...
-```
-
-**Downstream — Gateway to ESP32**
-```
-@ACTION,<LANE_ID>,<STATUS>,<REASON>
-
-@ACTION,1,GRANT,OK             open the barrier
-@ACTION,2,DENY,ALREADY_INSIDE  keep it closed
-@ACTION,1,GRANT,PENALTY        open, balance went negative
-```
-
-**Dashboard to Gateway (WebSocket JSON)**
-```json
-{ "type": "recharge", "vehicle_number": 3, "delta": 500 }
-```
-
-Delta is always a relative amount — never an absolute target balance.
-
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `[ERROR] PN532 not found` on boot | Wrong DIP switch, bad wiring, or no 5V power | Confirm I1=0 I2=1; check each wire with a multimeter; verify external 5V |
-| One lane silent, other works | Floating CS pin or bad module | Check CS is physically wired; swap the two PN532 modules to rule out a dead unit |
-| `PermissionError` opening COM port | Arduino Serial Monitor or another program has the port open | Close all Serial Monitor windows before running `server.py` |
-| Dashboard ONLINE but zero data | Browser is hitting VS Code Live Server on port 5500, not this gateway | Navigate directly to `http://localhost:8000/` |
-| Everything stops updating mid-session | `queue_drain_worker` thread hit an unhandled exception | Check the terminal for `[SERVER] ERROR processing line`; usually a DB issue fixed by `--reset-db` |
-| Wrong balances after adding new exits | `tollway.db` predates the `entry_lane` column | Run once with `--reset-db`, or let the auto-migration handle it (no data is lost) |
+Open `http://localhost:8000/` in any browser on the same machine. STATUS should flip to **ONLINE** and the sensor dots go green for each connected node.
 
 ---
 
 ## License
 
-No copyright 2026 Ev2TS. All rights not reserved.
+In compliance with the requirements for the CPE0035L Embedded Systems Laboratory final project. |  Group 6  Banquil, Layco, Lista, Melo, Mendoza 

@@ -1,8 +1,11 @@
 """
-frfr hardware integration.
+Hardware Integration.
 
-Bridges TWO real serial ports the ESP32 WROOM 32U Entrance node and
-the ESP32 30-Pin Exit node sa TollwayEngine /TollwayDB.
+python3 server.py --entry-port COM8 --exit-port COM9 --exit2-port COM11
+
+sa command line sa terminal html:
+RECHARGE,<vehicle_number>,<delta> e.g. RECHARGE,1,500  or  RECHARGE,1,-200
+
 """
 
 import argparse
@@ -32,7 +35,7 @@ class SerialNode:
 
     def open(self):
         self.ser = serial.Serial(self.port_name, self.baud, timeout=1)
-        time.sleep(2)  # let the ESP32 finish its reset-on-connect, same idea as html.md's boot delay
+        time.sleep(2)  
         self._thread = threading.Thread(target=self._read_loop, daemon=True)
         self._thread.start()
         print(f"[BRIDGE] {self.name} node online on {self.port_name} @ {self.baud} baud")
@@ -74,7 +77,6 @@ def list_ports():
 
 
 def console_input_loop(cmd_queue):
-    """RECHARGE,<vehicle>,<delta> in dashboard."""
     while True:
         try:
             line = input()
@@ -97,7 +99,6 @@ def handle_line(source, line, engine: TollwayEngine, db: TollwayDB, nodes: dict)
         action = format_action_line(result["lane_id"], result["status"], result["reason"])
         print(f"   << {action}   (vehicle={result['vehicle_number']}, "
               f"balance={result['balance']}, is_inside={result['is_inside']})")
-        # Route the @ACTION back down to whichever physical node the scan came from
         if source in nodes:
             nodes[source].send(action)
 
@@ -118,9 +119,7 @@ def handle_line(source, line, engine: TollwayEngine, db: TollwayDB, nodes: dict)
             print("   ", dict(row))
 
     else:
-        # Plain boot/debug text from a board (e.g. "[ENTRANCE NODE] Ready.") -- just echo it
         pass
-
 
 def main():
     parser = argparse.ArgumentParser(description="Real hardware bridge for the Tollway gateway")

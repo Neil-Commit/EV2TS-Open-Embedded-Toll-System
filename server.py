@@ -1,11 +1,8 @@
 """
-python Central Gateway as a real web server.
-
-Run it (open sa cmd):
-pip install fastapi uvicorn
-python3 server.py --entry-port COM8 --exit-port COM9
+Run it:
+    pip install fastapi uvicorn
+    python3 server.py --entry-port COM8 --exit-port COM9
     -> open http://localhost:8000/ in a browser
-
 """
 
 import argparse
@@ -35,7 +32,9 @@ main_loop: asyncio.AbstractEventLoop = None
 incoming: "queue.Queue" = queue.Queue()
 nodes: dict[str, SerialNode] = {}
 
+
 class ConnectionManager:
+    """Tracks every connected browser tab so results can be broadcast to all of them."""
 
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -88,13 +87,17 @@ def process_incoming_line(source: str, line: str):
                      "delta": rc["amount"], "balance": result["balance"]}
         return {"type": "error", "message": result["reason"]}
 
-    return None  
+    return None 
 
 
 def queue_drain_worker():
     while True:
         source, line = incoming.get()
-        result = process_incoming_line(source, line)
+        try:
+            result = process_incoming_line(source, line)
+        except Exception as e:
+            print(f"[SERVER] ERROR processing line from {source} ({line!r}): {e}")
+            continue
         if result is not None and main_loop is not None:
             asyncio.run_coroutine_threadsafe(manager.broadcast(result), main_loop)
 
@@ -119,6 +122,9 @@ async def lifespan(app: FastAPI):
     if exit_port:
         nodes["EXIT"] = SerialNode("EXIT", exit_port, baud, incoming)
         nodes["EXIT"].open()
+    if os.environ.get("TOLLWAY_EXIT2_PORT"):
+        nodes["EXIT2"] = SerialNode("EXIT2", os.environ["TOLLWAY_EXIT2_PORT"], baud, incoming)
+        nodes["EXIT2"].open()
 
     if not nodes:
         print("[SERVER] No --entry-port / --exit-port given -- running with no hardware "
@@ -133,7 +139,7 @@ async def lifespan(app: FastAPI):
 
     threading.Thread(target=queue_drain_worker, daemon=True).start()
 
-    yield  # app runnin here
+    yield 
 
     for node in nodes.values():
         node.close()
@@ -142,7 +148,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Tollway Gateway", lifespan=lifespan)
-
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -171,7 +176,6 @@ async def api_accounts():
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
 
-    # Database Hydration Engine (dont touch di na ako yung gumawa neto)
     await websocket.send_json({
         "type": "hydrate",
         "accounts": [dict(row) for row in db.dump_all()],
@@ -195,11 +199,11 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tollway FastAPI gateway server")
-    parser.add_argument("--entry-port", help="Serial port for the ESP32 Entrance node")
-    parser.add_argument("--exit-port", help="Serial port for the ESP32 Exit node")
+    parser.add_argument("--entry-port",  help="Serial port — Entrance node (Balintawak + Mindanao Ave)")
+    parser.add_argument("--exit-port",   help="Serial port — Exit Node 1 (Valenzuela + Meycauayan)")
+    parser.add_argument("--exit2-port",  help="Serial port — Exit Node 2 (Marilao + Bocaue)")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
@@ -210,6 +214,8 @@ if __name__ == "__main__":
         os.environ["TOLLWAY_ENTRY_PORT"] = args.entry_port
     if args.exit_port:
         os.environ["TOLLWAY_EXIT_PORT"] = args.exit_port
+    if args.exit2_port:
+        os.environ["TOLLWAY_EXIT2_PORT"] = args.exit2_port
     os.environ["TOLLWAY_BAUD"] = str(args.baud)
     if args.reset_db:
         os.environ["TOLLWAY_RESET_DB"] = "1"

@@ -1,17 +1,10 @@
 """
-parses incoming messages and formats outgoing messages~~~ yun lang
+Micro-protocol parser/formatter
 Upstream   (ESP32 -> Gateway):  @SCAN,<GATE_TYPE>,<LANE_ID>,<HEX_UID>
 Downstream (Gateway -> ESP32):  @ACTION,<LANE_ID>,<STATUS>,<REASON>
--------------------------------------------------------------------
-Example Scenario
-ESP32 scans an RFID tag:
-@SCAN,ENTRY,LANE1,04A2BC91
 """
-
-
 class ProtocolError(ValueError):
     pass
-
 def parse_scan_line(line: str) -> dict:
     line = line.strip()
     if not line.startswith("@SCAN,"):
@@ -23,10 +16,8 @@ def parse_scan_line(line: str) -> dict:
     if gate_type.upper() not in ("ENTRY", "EXIT"):
         raise ProtocolError(f"Unknown GATE_TYPE in @SCAN packet: {line!r}")
     return {"gate_type": gate_type.upper(), "lane_id": lane_id, "rfid_uid": hex_uid.upper()}
-
 def format_action_line(lane_id: str, status: str, reason: str) -> str:
     return f"@ACTION,{lane_id},{status},{reason}"
-
 def parse_recharge_line(line: str) -> dict:
     line = line.strip()
     if not line.startswith("RECHARGE,"):
