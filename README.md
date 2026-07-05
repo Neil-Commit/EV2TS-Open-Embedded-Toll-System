@@ -205,7 +205,7 @@ Unplug one board at a time and re-run to confirm which COM number belongs to whi
 python server.py --entry-port COM8 --exit-port COM9 --exit2-port COM10
 ```
 
-Replace `COM8`, `COM9`, `COM10` with your actual port numbers. On Linux/Mac idk I use windows onle HSAHAH.
+Replace `COM8`, `COM9`, `COM10` with your actual port numbers.
 
 Optional flags:
 
