@@ -17,24 +17,24 @@ DEFAULT_FARE = EXIT_COST  # pag unknown
 INTERCHANGE_NAMES = {
     ("ENTRY", "1"): "Balintawak",
     ("ENTRY", "2"): "Mindanao Ave",
-    ("EXIT",  "1"): "Valenzuela",
-    ("EXIT",  "2"): "Meycauayan",
-    ("EXIT",  "3"): "Marilao",
-    ("EXIT",  "4"): "Bocaue",
+    ("EXIT",  "3"): "Valenzuela",
+    ("EXIT",  "4"): "Meycauayan",
+    ("EXIT",  "5"): "Marilao",
+    ("EXIT",  "6"): "Bocaue",
 }
 
 # dsistance-based fare matrix (entry_lane, exit_lane) -> PHP fare
 FARE_MATRIX = {
     # Balintawak (KM 12) entries
-    ("1", "1"): 50.50,   # Balintawak -> Valenzuela   3.0 km
-    ("1", "2"): 64.50,   # Balintawak -> Meycauayan   7.0 km
-    ("1", "3"): 78.50,   # Balintawak -> Marilao     11.0 km
-    ("1", "4"): 92.50,   # Balintawak -> Bocaue       15.0 km
+    ("1", "3"): 50.50,   # Balintawak -> Valenzuela   3.0 km
+    ("1", "4"): 64.50,   # Balintawak -> Meycauayan   7.0 km
+    ("1", "5"): 78.50,   # Balintawak -> Marilao     11.0 km
+    ("1", "6"): 92.50,   # Balintawak -> Bocaue       15.0 km
     # Mindanao Ave (KM 13.5) entries
-    ("2", "1"): 45.25,   # Mindanao Ave -> Valenzuela  1.5 km
-    ("2", "2"): 59.25,   # Mindanao Ave -> Meycauayan  5.5 km
-    ("2", "3"): 73.25,   # Mindanao Ave -> Marilao     9.5 km
-    ("2", "4"): 87.25,   # Mindanao Ave -> Bocaue     13.5 km
+    ("2", "3"): 45.25,   # Mindanao Ave -> Valenzuela  1.5 km
+    ("2", "4"): 59.25,   # Mindanao Ave -> Meycauayan  5.5 km
+    ("2", "5"): 73.25,   # Mindanao Ave -> Marilao     9.5 km
+    ("2", "6"): 87.25,   # Mindanao Ave -> Bocaue     13.5 km
     # Tinuos ko isa-isa yan fr
 }
 

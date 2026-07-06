@@ -3,32 +3,30 @@
 #include <string.h>
 #include <Adafruit_PN532.h>
 
-// ---- Shared SPI bus ----
-#define SPI_SCK   (18)
-#define SPI_MISO  (19)
-#define SPI_MOSI  (23)
+// ---- Lane 3: Valenzuela (KM 23) — own dedicated pins ----
+#define LANE3_SCK   (18)
+#define LANE3_MISO  (19)
+#define LANE3_MOSI  (23)
+#define LANE3_SS    (5)
+#define LANE3_RST   (4)
+#define LANE3_ID    "3"
 
-// ---- Per-reader CS and RST ----
-#define L1_SS   (5)
-#define L1_RST  (4)
-#define L2_SS   (16)
-#define L2_RST  (17)
-#define L3_SS   (21)
-#define L3_RST  (22)
-#define L4_SS   (32)
-#define L4_RST  (33)
+// ---- Lane 4: Meycauayan (KM 27) — own dedicated pins ----
+#define LANE4_SCK   (14)
+#define LANE4_MISO  (27)
+#define LANE4_MOSI  (26)
+#define LANE4_SS    (25)
+#define LANE4_RST   (33)
+#define LANE4_ID    "4"
 
 #define GATE_TYPE "EXIT"
 
-// All four instances share the same SCK/MISO/MOSI pins.
-// Each gets a unique SS pin -- that's what isolates them on the bus.
-Adafruit_PN532 nfc1(SPI_SCK, SPI_MISO, SPI_MOSI, L1_SS); // Valenzuela
-Adafruit_PN532 nfc2(SPI_SCK, SPI_MISO, SPI_MOSI, L2_SS); // Meycauayan
-Adafruit_PN532 nfc3(SPI_SCK, SPI_MISO, SPI_MOSI, L3_SS); // Marilao
-Adafruit_PN532 nfc4(SPI_SCK, SPI_MISO, SPI_MOSI, L4_SS); // Bocaue
+Adafruit_PN532 nfcLane3(LANE3_SCK, LANE3_MISO, LANE3_MOSI, LANE3_SS);
+Adafruit_PN532 nfcLane4(LANE4_SCK, LANE4_MISO, LANE4_MOSI, LANE4_SS);
 
 const uint32_t SCAN_COOLDOWN = 2000;
-uint32_t lastScan1 = 0, lastScan2 = 0, lastScan3 = 0, lastScan4 = 0;
+uint32_t lastScanTimeLane3 = 0;
+uint32_t lastScanTimeLane4 = 0;
 
 void printUidHex(uint8_t* uid, uint8_t len) {
   for (uint8_t i = 0; i < len; i++) {
@@ -37,29 +35,22 @@ void printUidHex(uint8_t* uid, uint8_t len) {
   }
 }
 
-// THE CRITICAL BUS-SHARING FIX (GitHub issue #61):
-// Drive ALL CS pins HIGH before calling begin() on any reader.
-// Without this, every CS is LOW by default (selected), and begin()
-// on one reader broadcasts to all of them simultaneously, corrupting
-// every transaction that follows.
-void deassertAllCS() {
-  pinMode(L1_SS, OUTPUT); digitalWrite(L1_SS, HIGH);
-  pinMode(L2_SS, OUTPUT); digitalWrite(L2_SS, HIGH);
-  pinMode(L3_SS, OUTPUT); digitalWrite(L3_SS, HIGH);
-  pinMode(L4_SS, OUTPUT); digitalWrite(L4_SS, HIGH);
-}
-
-bool selfTest(Adafruit_PN532 &nfc, const char* label) {
+bool selfTestPn532(Adafruit_PN532 &nfc, const char* label) {
   nfc.begin();
-  uint32_t v = nfc.getFirmwareVersion();
-  if (!v) {
-    Serial.print("[ERROR] "); Serial.print(label);
-    Serial.println(" not found. Check CS/RST wiring, DIP switches (I1=0, I2=1), and 5V power.");
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    Serial.print("[ERROR] ");
+    Serial.print(label);
+    Serial.println(" not found. Check SCK/MISO/MOSI/CS/RST wiring, "
+                    "DIP switches (I1=0, I2=1), and 5V power.");
     return false;
   }
-  Serial.print("[OK] "); Serial.print(label);
-  Serial.print(" firmware "); Serial.print((v >> 24) & 0xFF);
-  Serial.print("."); Serial.println((v >> 16) & 0xFF);
+  Serial.print("[OK] ");
+  Serial.print(label);
+  Serial.print(" found, firmware version ");
+  Serial.print((versiondata >> 24) & 0xFF, DEC);
+  Serial.print('.');
+  Serial.println((versiondata >> 16) & 0xFF, DEC);
   nfc.SAMConfig();
   return true;
 }
@@ -73,9 +64,12 @@ void handleActionLine(char* line) {
   if (!lane || !status || !reason) return;
   Serial.print("[GATE] Lane "); Serial.print(lane); Serial.print(": ");
   if (strcmp(status, "GRANT") == 0) {
-    Serial.print("BARRIER WOULD OPEN ("); Serial.print(reason); Serial.println(")");
+    Serial.print("BARRIER WOULD OPEN (");
+    Serial.print(reason);
+    Serial.println(")");
   } else {
-    Serial.print("BARRIER STAYS CLOSED -- "); Serial.println(reason);
+    Serial.print("BARRIER STAYS CLOSED -- ");
+    Serial.println(reason);
   }
 }
 
@@ -83,57 +77,52 @@ void setup(void) {
   Serial.begin(115200);
   while (!Serial) delay(10);
 
-  // Pulse RST HIGH on all readers
-  pinMode(L1_RST, OUTPUT); digitalWrite(L1_RST, HIGH);
-  pinMode(L2_RST, OUTPUT); digitalWrite(L2_RST, HIGH);
-  pinMode(L3_RST, OUTPUT); digitalWrite(L3_RST, HIGH);
-  pinMode(L4_RST, OUTPUT); digitalWrite(L4_RST, HIGH);
+  pinMode(LANE3_RST, OUTPUT); digitalWrite(LANE3_RST, HIGH);
+  pinMode(LANE4_RST, OUTPUT); digitalWrite(LANE4_RST, HIGH);
 
-  // CRITICAL: deassert ALL CS lines before the first begin()
-  deassertAllCS();
+  selfTestPn532(nfcLane3, "PN532 Lane 3 (Valenzuela)");
+  selfTestPn532(nfcLane4, "PN532 Lane 4 (Meycauayan)");
 
-  // Now it's safe to init each reader in turn --
-  // only the target CS goes LOW during each begin(), the rest stay HIGH
-  selfTest(nfc1, "PN532 L1 (Valenzuela)");  deassertAllCS();
-  selfTest(nfc2, "PN532 L2 (Meycauayan)");  deassertAllCS();
-  selfTest(nfc3, "PN532 L3 (Marilao)");     deassertAllCS();
-  selfTest(nfc4, "PN532 L4 (Bocaue)");      deassertAllCS();
-
-  Serial.println("[EXIT NODE] Ready — Valenzuela / Meycauayan / Marilao / Bocaue");
-}
-
-// Helper: poll one reader, emit @SCAN if a card is found
-void pollLane(Adafruit_PN532 &nfc, const char* laneId,
-              uint32_t &lastScanTime, uint32_t currentTime) {
-  if (currentTime - lastScanTime < SCAN_COOLDOWN) return;
-  uint8_t uid[7]; uint8_t uidLen;
-  if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 100)) {
-    lastScanTime = currentTime;
-    deassertAllCS(); // re-deassert after transaction -- defensive, good practice
-    Serial.print("@SCAN," GATE_TYPE ",");
-    Serial.print(laneId);
-    Serial.print(",");
-    printUidHex(uid, uidLen);
-    Serial.println();
-  }
+  Serial.println("[EXIT NODE 1] Ready — Valenzuela & Meycauayan exits.");
 }
 
 void loop(void) {
-  // Listen for @ACTION replies from the Python gateway
-  static char buf[64];
-  static int bufIdx = 0;
+  static char serialBuffer[64];
+  static int bufferIndex = 0;
   while (Serial.available() > 0) {
     char c = Serial.read();
     if (c == '\n' || c == '\r') {
-      if (bufIdx > 0) { buf[bufIdx] = '\0'; handleActionLine(buf); bufIdx = 0; }
-    } else if (bufIdx < 63) {
-      buf[bufIdx++] = c;
+      if (bufferIndex > 0) {
+        serialBuffer[bufferIndex] = '\0';
+        handleActionLine(serialBuffer);
+        bufferIndex = 0;
+      }
+    } else if (bufferIndex < 63) {
+      serialBuffer[bufferIndex++] = c;
     }
   }
 
-  uint32_t now = millis();
-  pollLane(nfc1, "1", lastScan1, now); // Valenzuela
-  pollLane(nfc2, "2", lastScan2, now); // Meycauayan
-  pollLane(nfc3, "3", lastScan3, now); // Marilao
-  pollLane(nfc4, "4", lastScan4, now); // Bocaue
+  uint32_t currentTime = millis();
+
+  // ---- Lane 3: Valenzuela ----
+  if (currentTime - lastScanTimeLane3 >= SCAN_COOLDOWN) {
+    uint8_t uid[7]; uint8_t uidLength;
+    if (nfcLane3.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+      lastScanTimeLane3 = currentTime;
+      Serial.print("@SCAN," GATE_TYPE "," LANE3_ID ",");
+      printUidHex(uid, uidLength);
+      Serial.println();
+    }
+  }
+
+  // ---- Lane 4: Meycauayan ----
+  if (currentTime - lastScanTimeLane4 >= SCAN_COOLDOWN) {
+    uint8_t uid[7]; uint8_t uidLength;
+    if (nfcLane4.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+      lastScanTimeLane4 = currentTime;
+      Serial.print("@SCAN," GATE_TYPE "," LANE4_ID ",");
+      printUidHex(uid, uidLength);
+      Serial.println();
+    }
+  }
 }
