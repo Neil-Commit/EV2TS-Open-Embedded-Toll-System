@@ -207,21 +207,13 @@ python server.py --entry-port COM8 --exit-port COM9 --exit2-port COM10
 
 Replace `COM8`, `COM9`, `COM10` with your actual port numbers.
 
-Optional flags:
-
-| Flag | Default | Description |
-|---|---|---|
-| `--reset-db` | off | Wipe `tollway.db` and start fresh |
-| `--baud` | 115200 | Serial baud rate |
-| `--port` | 8000 | HTTP port for the dashboard |
-| `--host` | 0.0.0.0 | Bind address |
-
 ### 6. Open the dashboard
 
 Open `http://localhost:8000/` in any browser on the same machine. STATUS should flip to **ONLINE** and the sensor dots go green for each connected node.
 
 ---
 
-## License
+## Submitted in Partial Fulfillment of the Requirements for CPE0035L – Embedded Systems Laboratory Final Project
 
-In compliance with the requirements for the CPE0035L Embedded Systems Laboratory final project. |  Group 6  Banquil, Layco, Lista, Melo, Mendoza 
+Presented by: Group 6
+Members: Banquil, Layco, Lista, Melo, Mendoza

@@ -3,7 +3,7 @@
 #include <string.h>
 #include <Adafruit_PN532.h>
 
-// ---- Lane 3: Marilao (KM 23) — own dedicated pins ----
+// Lane 3: Marilao 
 #define LANE3_SCK   (18)
 #define LANE3_MISO  (19)
 #define LANE3_MOSI  (23)
@@ -11,7 +11,7 @@
 #define LANE3_RST   (4)
 #define LANE3_ID    "3"
 
-// ---- Lane 4: Bocaue (KM 27) — own dedicated pins ----
+// Lane 4: Bocaue
 #define LANE4_SCK   (14)
 #define LANE4_MISO  (27)
 #define LANE4_MOSI  (26)
@@ -24,7 +24,7 @@
 Adafruit_PN532 nfcLane3(LANE3_SCK, LANE3_MISO, LANE3_MOSI, LANE3_SS);
 Adafruit_PN532 nfcLane4(LANE4_SCK, LANE4_MISO, LANE4_MOSI, LANE4_SS);
 
-const uint32_t SCAN_COOLDOWN = 2000; // ms
+const uint32_t SCAN_COOLDOWN = 2000; 
 uint32_t lastScanTimeLane3 = 0;
 uint32_t lastScanTimeLane4 = 0;
 
@@ -104,7 +104,6 @@ void loop(void) {
 
   uint32_t currentTime = millis();
 
-  // ---- Lane 3: Marilao ----
   if (currentTime - lastScanTimeLane3 >= SCAN_COOLDOWN) {
     uint8_t uid[7]; uint8_t uidLength;
     if (nfcLane3.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
@@ -115,7 +114,6 @@ void loop(void) {
     }
   }
 
-  // ---- Lane 4: Bocaue ----
   if (currentTime - lastScanTimeLane4 >= SCAN_COOLDOWN) {
     uint8_t uid[7]; uint8_t uidLength;
     if (nfcLane4.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {

@@ -3,15 +3,15 @@
 #include <string.h>
 #include <Adafruit_PN532.h>
 
-// ---- Lane 1: own dedicated pins ----
+// Lane 1: Balintawak 
 #define LANE1_SCK   (18)
-#define LANE1_MISO  (19)
+#define LANE1_MISO  (19)  
 #define LANE1_MOSI  (23)
 #define LANE1_SS    (5)
 #define LANE1_RST   (4)
 #define LANE1_ID    "1"
 
-// ---- Lane 2: own dedicated pins (nothing shared with Lane 1) ----
+// Lane 2: Mindanao Ave
 #define LANE2_SCK   (14)
 #define LANE2_MISO  (27)
 #define LANE2_MOSI  (26)
@@ -24,7 +24,7 @@
 Adafruit_PN532 nfcLane1(LANE1_SCK, LANE1_MISO, LANE1_MOSI, LANE1_SS);
 Adafruit_PN532 nfcLane2(LANE2_SCK, LANE2_MISO, LANE2_MOSI, LANE2_SS);
 
-const uint32_t SCAN_COOLDOWN = 2000; // ms, same cooldown style as cppcode.md
+const uint32_t SCAN_COOLDOWN = 2000;
 uint32_t lastScanTimeLane1 = 0;
 uint32_t lastScanTimeLane2 = 0;
 
@@ -34,10 +34,7 @@ void printUidHex(uint8_t* uid, uint8_t len) {
     Serial.print(uid[i], HEX);
   }
 }
-
-// Self-test one PN532: must pass before card-tap detection can ever work.
-// If it fails, it's a wiring/power/SPI-mode problem, not a "card not
-// read" problem.
+// diagnosis part - run on serial output first before running in engine.py
 bool selfTestPn532(Adafruit_PN532 &nfc, const char* label) {
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -58,7 +55,6 @@ bool selfTestPn532(Adafruit_PN532 &nfc, const char* label) {
   return true;
 }
 
-// Parses an incoming @ACTION,<LANE_ID>,<STATUS>,<REASON> line from the gateway
 void handleActionLine(char* line) {
   if (strncmp(line, "@ACTION,", 8) != 0) return;
 
@@ -95,7 +91,6 @@ void setup(void) {
 }
 
 void loop(void) {
-  // Listen for @ACTION replies coming back down from the Python gateway
   static char serialBuffer[64];
   static int bufferIndex = 0;
   while (Serial.available() > 0) {
@@ -113,7 +108,6 @@ void loop(void) {
 
   uint32_t currentTime = millis();
 
-  // ---- Lane 1 ----
   if (currentTime - lastScanTimeLane1 >= SCAN_COOLDOWN) {
     uint8_t uid[7];
     uint8_t uidLength;
@@ -125,7 +119,6 @@ void loop(void) {
     }
   }
 
-  // ---- Lane 2 ----
   if (currentTime - lastScanTimeLane2 >= SCAN_COOLDOWN) {
     uint8_t uid[7];
     uint8_t uidLength;

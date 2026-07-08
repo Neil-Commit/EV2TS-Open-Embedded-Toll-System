@@ -3,7 +3,7 @@
 #include <string.h>
 #include <Adafruit_PN532.h>
 
-// ---- Lane 1: Valenzuela (KM 15) — own dedicated pins ----
+// Lane 1: Valenzuela (KM 15) 
 #define LANE1_SCK   (18)
 #define LANE1_MISO  (19)
 #define LANE1_MOSI  (23)
@@ -11,7 +11,7 @@
 #define LANE1_RST   (4)
 #define LANE1_ID    "1"
 
-// ---- Lane 2: Meycauayan (KM 19) — own dedicated pins ----
+// Lane 2: Meycauayan (KM 19)
 #define LANE2_SCK   (14)
 #define LANE2_MISO  (27)
 #define LANE2_MOSI  (26)
@@ -24,7 +24,7 @@
 Adafruit_PN532 nfcLane1(LANE1_SCK, LANE1_MISO, LANE1_MOSI, LANE1_SS);
 Adafruit_PN532 nfcLane2(LANE2_SCK, LANE2_MISO, LANE2_MOSI, LANE2_SS);
 
-const uint32_t SCAN_COOLDOWN = 2000; // ms
+const uint32_t SCAN_COOLDOWN = 2000;
 uint32_t lastScanTimeLane1 = 0;
 uint32_t lastScanTimeLane2 = 0;
 
@@ -64,7 +64,7 @@ void handleActionLine(char* line) {
   if (!lane || !status || !reason) return;
   Serial.print("[GATE] Lane "); Serial.print(lane); Serial.print(": ");
   if (strcmp(status, "GRANT") == 0) {
-    Serial.print("BARRIER WOULD OPEN (");
+    Serial.print("BARRIER WOULD OPEN (");     // Joke lang yung barrier
     Serial.print(reason);
     Serial.println(")");
   } else {
@@ -73,9 +73,6 @@ void handleActionLine(char* line) {
   }
 }
 
-// Helper: poll one reader, emit @SCAN if a card is found.
-// (Ported from exit_node's pollLane — avoids duplicating the two
-// near-identical blocks that exit_node2 has in loop().)
 void pollLane(Adafruit_PN532 &nfc, const char* laneId,
               uint32_t &lastScanTime, uint32_t currentTime) {
   if (currentTime - lastScanTime < SCAN_COOLDOWN) return;
@@ -96,10 +93,6 @@ void setup(void) {
 
   pinMode(LANE1_RST, OUTPUT); digitalWrite(LANE1_RST, HIGH);
   pinMode(LANE2_RST, OUTPUT); digitalWrite(LANE2_RST, HIGH);
-
-  // No deassertAllCS() needed here: Lane 1 and Lane 2 each have their
-  // own independent SCK/MISO/MOSI/CS, so there's no shared bus for
-  // begin() to stomp on (same reasoning as exit_node2).
 
   selfTestPn532(nfcLane1, "PN532 Lane 1 (Valenzuela)");
   selfTestPn532(nfcLane2, "PN532 Lane 2 (Meycauayan)");
